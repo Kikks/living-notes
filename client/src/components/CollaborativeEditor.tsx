@@ -16,6 +16,17 @@ interface CollaborativeEditorProps {
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// Create a simple provider wrapper that satisfies the CollaborationCursor interface
+class SimpleProvider {
+  awareness: Awareness;
+  doc: Y.Doc;
+
+  constructor(doc: Y.Doc, awareness: Awareness) {
+    this.doc = doc;
+    this.awareness = awareness;
+  }
+}
+
 export default function CollaborativeEditor({
   noteCode,
   userName,
@@ -24,9 +35,12 @@ export default function CollaborativeEditor({
   const [socket, setSocket] = useState<Socket | null>(null);
   const [ydoc] = useState(() => new Y.Doc());
   const [connected, setConnected] = useState(false);
-  
+
   // Create awareness instance
   const awareness = useMemo(() => new Awareness(ydoc), [ydoc]);
+
+  // Create provider wrapper
+  const provider = useMemo(() => new SimpleProvider(ydoc, awareness), [ydoc, awareness]);
 
   const editor = useEditor({
     extensions: [
@@ -37,7 +51,7 @@ export default function CollaborativeEditor({
         document: ydoc,
       }),
       CollaborationCursor.configure({
-        provider: { awareness, doc: ydoc } as any,
+        provider: provider,
         user: {
           name: userName,
           color: getUserColor(userName),
@@ -60,7 +74,7 @@ export default function CollaborativeEditor({
 
       // Join the note room
       newSocket.emit('join-note', { code: noteCode, userName });
-      
+
       // Set local awareness state
       awareness.setLocalState({
         name: userName,
