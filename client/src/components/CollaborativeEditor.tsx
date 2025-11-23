@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import * as Y from 'yjs';
+import { Awareness } from 'y-protocols/awareness';
 import { io, Socket } from 'socket.io-client';
 import { getUserColor } from '../utils/colors';
 
@@ -23,6 +24,9 @@ export default function CollaborativeEditor({
   const [socket, setSocket] = useState<Socket | null>(null);
   const [ydoc] = useState(() => new Y.Doc());
   const [connected, setConnected] = useState(false);
+  
+  // Create awareness instance
+  const awareness = useMemo(() => new Awareness(ydoc), [ydoc]);
 
   const editor = useEditor({
     extensions: [
@@ -33,7 +37,7 @@ export default function CollaborativeEditor({
         document: ydoc,
       }),
       CollaborationCursor.configure({
-        provider: null as any, // We'll handle cursor updates manually
+        provider: { awareness, doc: ydoc } as any,
         user: {
           name: userName,
           color: getUserColor(userName),
@@ -56,6 +60,12 @@ export default function CollaborativeEditor({
 
       // Join the note room
       newSocket.emit('join-note', { code: noteCode, userName });
+      
+      // Set local awareness state
+      awareness.setLocalState({
+        name: userName,
+        color: getUserColor(userName),
+      });
     });
 
     newSocket.on('note-joined', (data: any) => {
@@ -89,11 +99,11 @@ export default function CollaborativeEditor({
     });
 
     newSocket.on('awareness-update', (data: any) => {
-      // Handle cursor position updates from other users
-      if (editor) {
-        editor.commands.updateUser(data.userId, {
-          name: data.userName,
-          color: getUserColor(data.userId),
+      // Handle awareness updates from other users
+      if (data.state && data.userId) {
+        awareness.setLocalStateField('clients', {
+          ...awareness.getStates().get(data.userId),
+          [data.userId]: data.state,
         });
       }
     });
@@ -112,7 +122,7 @@ export default function CollaborativeEditor({
     return () => {
       newSocket.close();
     };
-  }, [noteCode, userName, ydoc, onUsersUpdate]);
+  }, [noteCode, userName, ydoc, onUsersUpdate, awareness]);
 
   // Send updates to the server
   useEffect(() => {
@@ -131,27 +141,23 @@ export default function CollaborativeEditor({
     };
   }, [socket, ydoc]);
 
-  // Send cursor updates
+  // Send awareness updates
   useEffect(() => {
-    if (!socket || !editor) return;
+    if (!socket || !awareness) return;
 
-    const sendCursorUpdate = () => {
-      const { from, to } = editor.state.selection;
+    const awarenessChangeHandler = () => {
+      const states = awareness.getStates();
       socket.emit('awareness-update', {
-        state: {
-          selection: { from, to },
-          name: userName,
-          color: getUserColor(userName),
-        },
+        state: awareness.getLocalState(),
       });
     };
 
-    editor.on('selectionUpdate', sendCursorUpdate);
+    awareness.on('change', awarenessChangeHandler);
 
     return () => {
-      editor.off('selectionUpdate', sendCursorUpdate);
+      awareness.off('change', awarenessChangeHandler);
     };
-  }, [socket, editor, userName]);
+  }, [socket, awareness]);
 
   if (!editor) {
     return <div className="p-4">Loading editor...</div>;

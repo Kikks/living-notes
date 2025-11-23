@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import VersionHistory from '../components/VersionHistory';
-import { Note as NoteType, User } from '../types';
+import type { Note as NoteType, User } from '../types';
 
 export default function Note() {
   const { code } = useParams<{ code: string }>();

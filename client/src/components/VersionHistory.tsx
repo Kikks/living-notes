@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Version } from '../types';
+import type { Version } from '../types';
 
 interface VersionHistoryProps {
   noteCode: string;
